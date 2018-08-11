@@ -1,4 +1,6 @@
-function callRust() {
+wasm_bindgen("./spot_rust_bg.wasm")
+
+function callRust(s, resolve) {
   console.log("in the caller");
-  wasm_bindgen("./spot_rust_bg.wasm").then(() => wasm_bindgen.greet('Jon'))
+  window.setTimeout(() => resolve(wasm_bindgen.greet(s)), 1);
 }
