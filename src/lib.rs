@@ -9,17 +9,25 @@ enum Player {
     P2
 }
 
-fn get_player(s: &str) -> Player {
-    if s == "2" {Player::P2}
-    else if s == "1" {Player::P1}
-    else {Player::NoOne}
+// Static
+impl Player {
+    // parse a string as a player
+    fn parse_string(s: &str) -> Player {
+        if s == "2" {Player::P2}
+        else if s == "1" {Player::P1}
+        else {Player::NoOne}
+    }
 }
 
-fn get_player_points(p: &Player) -> i32 {
-    match p {
-        Player::P1 => 1,
-        Player::P2 => -1,
-        Player::NoOne => 0
+// Instance
+impl Player {
+    // how many points is a square for this player worth
+    fn get_points(&self) -> i32 {
+        match self {
+            Player::P1 => 1,
+            Player::P2 => -1,
+            Player::NoOne => 0
+        }
     }
 }
 
@@ -27,38 +35,43 @@ struct Board {
     squares: Vec<Vec<Player>>
 }
 
+// Instance
+impl Board {
+    // What is the score for this board
+    fn get_points(&self) -> i32 {
+        fn get_row_points(row: &Vec<Player>) -> i32 {
+            row.into_iter().map(|p| p.get_points()).fold(0, |agg, x| agg + x)
+        }
+        let squares: &Vec<Vec<Player>> = &self.squares;
+        let row_sums: Vec<i32> = squares.into_iter().map(|row| get_row_points(&row)).collect();
+        row_sums.into_iter().fold(0, |agg, x| agg + x)
+    }
+}
+
 struct BoardAndPoints {
     board: Board,
     points: i32
 }
 
-fn get_row_points(row: &Vec<Player>) -> i32 {
-    row.into_iter().map(|p| get_player_points(&p)).fold(0, |agg, x| agg + x)
-}
-
-fn get_board_points(board: &Board) -> i32 {
-    let squares: &Vec<Vec<Player>> = &board.squares;
-    let row_sums: Vec<i32> = squares.into_iter().map(|row| get_row_points(&row)).collect();
-    row_sums.into_iter().fold(0, |agg, x| agg + x)
-}
-
-fn parse_board(board_string: &str) -> BoardAndPoints {
-    let rows: Vec<&str> = board_string.split(":").collect();
-    let squares: Vec<Vec<Player>> = rows.into_iter().map(|row| {
-        row.chars().map(|x| get_player(&x.to_string())).collect()
-    }).collect();
-    let board = Board {
-        squares
-    };
-    let points = get_board_points(&board);
-    BoardAndPoints {
-        board,
-        points: points
+impl BoardAndPoints {
+    fn parse_board(board_string: &str) -> BoardAndPoints {
+        let rows: Vec<&str> = board_string.split(":").collect();
+        let squares: Vec<Vec<Player>> = rows.into_iter().map(|row| {
+            row.chars().map(|x| Player::parse_string(&x.to_string())).collect()
+        }).collect();
+        let board = Board {
+            squares
+        };
+        let points = board.get_points();
+        BoardAndPoints {
+            board,
+            points: points
+        }
     }
 }
 
 #[wasm_bindgen]
 pub fn greet(board_string: &str) -> String {
-    let start: BoardAndPoints = parse_board(board_string);
+    let start: BoardAndPoints = BoardAndPoints::parse_board(board_string);
     "Hello, ".to_owned() + board_string + "!" + &start.points.to_string()
 }
