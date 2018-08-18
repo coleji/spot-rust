@@ -19,9 +19,10 @@ enum MoveType {
     Illegal
 }
 
-enum Move {
-    Take(Position),
-    Jump(Position, Position)
+struct Move {
+    moveType: MoveType,
+    from: Position,
+    to: Position
 }
 
 #[derive(Clone)]
@@ -40,7 +41,7 @@ struct BoardAndPoints {
 struct BoardAndPointsAndPossibleMoves {
     boardAndPoints: BoardAndPoints,
     player: Player,
-    takes: Vec<Position>,
+    takes: Vec<(Position, Position)>,
     jumps: Vec<(Position, Position)>
 }
 
@@ -122,7 +123,7 @@ impl Board {
     }
 
     // return true if the player can take that position
-    fn can_take(&self, player: &Player, pos: &Position) -> bool {
+    fn can_take(&self, player: &Player, pos: &Position) -> Option<Move> {
         let edge_size = self.edge_size;
         let take_rows: Vec<usize> = {
             if pos.row == 0 { vec![0, 1] }
@@ -137,10 +138,16 @@ impl Board {
 
         for row in &take_rows {
             for col in &take_cols {
-                if &self.squares[*row][*col] == player { return true; }
+                if &self.squares[*row][*col] == player { 
+                    return Some(Move {
+                        moveType: MoveType::Take,
+                        from: Position{row: *row, col: *col},
+                        to: pos.clone()
+                    })
+                }
             }
         }
-        false
+        None
     }
 
     // return a vec of all possible starting points for a jump to that position
@@ -167,8 +174,8 @@ impl Board {
     }
 
     // vector of all positions that are nonempty
-    fn get_all_moves(&self, player: &Player) -> (Vec<Position>, Vec<(Position, Position)>) {
-        let mut takes: Vec<Position> = Vec::new();
+    fn get_all_moves(&self, player: &Player) -> (Vec<(Position, Position)>, Vec<(Position, Position)>) {
+        let mut takes: Vec<(Position, Position)> = Vec::new();
         let mut jumps: Vec<(Position, Position)> = Vec::new();
         for row in 0..self.edge_size {
             for col in 0..self.edge_size {
@@ -177,12 +184,13 @@ impl Board {
                     continue;
                 }
                 let pos = Position{ row, col};
-                if self.can_take(player, &pos) {
-                    takes.push(pos.clone());
-                } else {
-                    let jump_pairs = self.get_jumps(player, &pos);
-                    for from_pos in jump_pairs {
-                        jumps.push((from_pos.clone(), pos.clone()));
+                match self.can_take(player, &pos) {
+                    Some(m) => takes.push((m.from.clone(), m.to.clone())),
+                    _ => {
+                        let jump_pairs = self.get_jumps(player, &pos);
+                        for from_pos in jump_pairs {
+                            jumps.push((from_pos.clone(), pos.clone()));
+                        }
                     }
                 }
             }
@@ -244,15 +252,12 @@ impl BoardAndPoints {
 
         // start with the 1 point for taking a new square, if this is a take
         let mut delta: i32 = {
-            match theMove {
-                Move::Take(_) => 1,
-                Move::Jump(_, _) => 0
+            match theMove.moveType {
+                MoveType::Take => 1,
+                _ => 0
             }
         };
-        let to: &Position = match theMove {
-            Move::Take(p) => p,
-            Move::Jump(_, p) => p
-        };
+        let to: &Position = &theMove.to;
         let edge_size = self.board.edge_size;
         let mut new_board: Board = self.board.clone();
 
@@ -285,12 +290,9 @@ impl BoardAndPoints {
         }
 
         // If this is a jump, free the `from` square
-        match theMove {
-            Move::Jump(from, _) => {
-                let p = &mut new_board.squares[from.row][from.col];
-                *p = Player::NoOne;
-            }
-            Move::Take(_) => {}
+        if theMove.moveType == MoveType::Jump {
+            let p = &mut new_board.squares[theMove.from.row][theMove.from.col];
+            *p = Player::NoOne;
         }
 
         BoardAndPoints{
@@ -303,8 +305,12 @@ impl BoardAndPoints {
 impl BoardAndPointsAndPossibleMoves {
     // Entry point
     fn find_best_move(&self, is_opponent: bool, levels_left: u8) -> MoveResult {
-        let firstTake = &self.takes[0];
-        let theMove = Move::Take(firstTake.clone());
+        let firstTake = (&self.takes[0]).clone();
+        let theMove = Move {
+            moveType: MoveType::Take,
+            from: firstTake.0,
+            to: firstTake.1
+        };
         let startBoard: BoardAndPointsAndPossibleMoves = self.clone();
         let endBoard: BoardAndPoints = self.boardAndPoints.move_into_square(&self.player, false, &theMove);
         MoveResult{
@@ -328,8 +334,6 @@ pub fn greet(board_string: &str) -> String {
     let start: BoardAndPoints = Board::parse_board(board_string);
     let withMoves: BoardAndPointsAndPossibleMoves = start.attach_moves(&Player::P2);
     let moveResult: MoveResult = withMoves.find_best_move(false, 1);
-    match moveResult.theMove {
-        Move::Take(pos) => pos.row.to_string() + "," + &pos.col.to_string(),
-        Move::Jump(from, to) => from.row.to_string() + "," + &from.col.to_string() + ">" + &to.row.to_string() + "," + &to.col.to_string()
-    }
+    let theMove = moveResult.theMove;
+    theMove.from.row.to_string() + "," + &theMove.from.col.to_string() + ">" + &theMove.to.row.to_string() + "," + &theMove.to.col.to_string()
 }
