@@ -13,8 +13,7 @@ enum Player {
 #[derive(PartialEq, Clone)]
 enum MoveType {
     Take,
-    Jump,
-    Illegal
+    Jump
 }
 
 #[derive(Clone)]
@@ -123,7 +122,7 @@ impl Board {
         row_sums.into_iter().fold(0, |agg, x| agg + x)
     }
 
-    // return true if the player can take that position
+    // return Some(arbitrary `from` position) if the player can take that position, None otherwise
     fn can_take(&self, player: &Player, pos: &Position) -> Option<Move> {
         let edge_size = self.edge_size;
         let take_rows: Vec<usize> = {
@@ -170,7 +169,7 @@ impl Board {
         ret
     }
 
-    // vector of all positions that are nonempty
+    // vector of all takes and all jumps
     fn get_all_moves(&self, player: &Player) -> (Vec<(Position, Position)>, Vec<(Position, Position)>) {
         let mut takes: Vec<(Position, Position)> = Vec::new();
         let mut jumps: Vec<(Position, Position)> = Vec::new();
@@ -194,23 +193,6 @@ impl Board {
         }
         (takes, jumps)
     }
-
-/*
-    // given a board and a desire to move, what kind of move would it be
-    fn move_type(&self, p: Player, from_row: usize, from_col: usize, to_row: usize, to_col: usize) -> Move {
-        let player_on_to: &Player = &self.squares[to_row][to_col];
-        if player_on_to != &Player::NoOne { return Move::Illegal; }
-        let row_delta = usize_abs_delta(from_row, to_row);
-        let col_delta = usize_abs_delta(from_col, to_col);
-        if row_delta <=1 && col_delta <= 1 {
-            Move::Take
-        } else if row_delta <= 2 && col_delta <= 2 {
-            Move::Jump
-        } else {
-            Move::Illegal
-        }
-    }
-*/
 }
 
 // Instance
@@ -225,25 +207,7 @@ impl BoardAndPoints {
         }
     }
 
-/*
-
-
-    // Step 1: Square => Set of all moves and results of moving to that square
-    // Given a moving player, board, and a square to move to, return a BoardAndPoints for the result of each move that moves into that square
-    // i.e. 0-1 takes, 0-m jumps, empty vec if there's no way for that player to move into that square
-    fn get_all_moves_to_square(&self, player: &Player, to: Position) -> Vec<BoardAndPoints> {
-        let mut result: Vec<BoardAndPoints> = vec![];
-        let occupying_player = &self.board.squares[to.row][to.col];
-        // if someone already has that square, bail
-        if occupying_player != &Player::NoOne { return result };
-
-        // can we take it with an adjacent?
-        // 
-
-        result
-    }*/
-
-    // Step 1a: Square => particular move type into square => Results of that single move
+    // Square => particular move type into square => Results of that single move
     fn move_into_square(&self, player: &Player, is_opponent: bool, the_move: &Move) -> BoardAndPoints {
         // Assume that some other function has already determined that moving from that square into that square with the given movetype is valid
 
