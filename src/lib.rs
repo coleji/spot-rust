@@ -10,13 +10,14 @@ enum Player {
     P2
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 enum MoveType {
     Take,
     Jump,
     Illegal
 }
 
+#[derive(Clone)]
 struct Move {
     move_type: MoveType,
     from: Position,
@@ -49,10 +50,12 @@ struct Position {
     col: usize
 }
 
+#[derive(Clone)]
 struct MoveResult {
     the_move: Move,
     start_board: BoardAndPointsAndPossibleMoves,
-    end_board: BoardAndPoints
+    end_board: BoardAndPoints,
+    total_node_value: i32
 }
 
 
@@ -299,19 +302,35 @@ impl BoardAndPoints {
 impl BoardAndPointsAndPossibleMoves {
     // Entry point
     fn find_best_move(&self, is_opponent: bool, levels_left: u8) -> MoveResult {
-        let first_take = (&self.takes[0]).clone();
-        let the_move = Move {
+        let mut results: Vec<MoveResult> = Vec::new();
+        let takes: Vec<Move> = (&self.takes).into_iter().map(|t| Move{
             move_type: MoveType::Take,
-            from: first_take.0,
-            to: first_take.1
-        };
-        let start_board: BoardAndPointsAndPossibleMoves = self.clone();
-        let end_board: BoardAndPoints = self.board_and_points.move_into_square(&self.player, false, &the_move);
-        MoveResult{
-            the_move,
-            start_board,
-            end_board
+            from: t.0.clone(),
+            to: t.1.clone()
+        }).collect();
+        let jumps: Vec<Move> = (&self.jumps).into_iter().map(|t| Move{
+            move_type: MoveType::Jump,
+            from: t.0.clone(),
+            to: t.1.clone()
+        }).collect();
+        let moves: Vec<Move> = [&takes[..], &jumps[..]].concat();
+        for the_move in moves {
+            let end_board = self.board_and_points.move_into_square(&self.player, false, &the_move);
+            let points = end_board.points;
+            results.push(MoveResult {
+                the_move: the_move.clone(),
+                start_board: self.clone(),
+                end_board,
+                total_node_value: points
+            });
         }
+        let mut winning_result = results[0].clone();
+        for result in results {
+            if result.total_node_value > winning_result.total_node_value {
+                winning_result = result;
+            }
+        }
+        winning_result
     }
 }
 
