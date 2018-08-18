@@ -3,8 +3,6 @@
 extern crate wasm_bindgen;
 use wasm_bindgen::prelude::*;
 
-use std::collections::HashSet;
-
 #[derive(PartialEq, Clone)]
 enum Player {
     NoOne,
@@ -20,7 +18,7 @@ enum MoveType {
 }
 
 struct Move {
-    moveType: MoveType,
+    move_type: MoveType,
     from: Position,
     to: Position
 }
@@ -39,7 +37,7 @@ struct BoardAndPoints {
 
 #[derive(Clone)]
 struct BoardAndPointsAndPossibleMoves {
-    boardAndPoints: BoardAndPoints,
+    board_and_points: BoardAndPoints,
     player: Player,
     takes: Vec<(Position, Position)>,
     jumps: Vec<(Position, Position)>
@@ -52,9 +50,9 @@ struct Position {
 }
 
 struct MoveResult {
-    theMove: Move,
-    startBoard: BoardAndPointsAndPossibleMoves,
-    endBoard: BoardAndPoints
+    the_move: Move,
+    start_board: BoardAndPointsAndPossibleMoves,
+    end_board: BoardAndPoints
 }
 
 
@@ -140,7 +138,7 @@ impl Board {
             for col in &take_cols {
                 if &self.squares[*row][*col] == player { 
                     return Some(Move {
-                        moveType: MoveType::Take,
+                        move_type: MoveType::Take,
                         from: Position{row: *row, col: *col},
                         to: pos.clone()
                     })
@@ -153,7 +151,6 @@ impl Board {
     // return a vec of all possible starting points for a jump to that position
     fn get_jumps(&self, player: &Player, pos: &Position) -> Vec<Position> {
         let mut ret: Vec<Position> = Vec::new();
-        let edge_size = self.edge_size;
         // for each board square, could that square jump to the desired position
         for row in 0..self.edge_size {
             for col in 0..self.edge_size {
@@ -162,10 +159,7 @@ impl Board {
 
                 let row_delta = usize_abs_delta(row, pos.row);
                 let col_delta = usize_abs_delta(col, pos.col);
-                if (
-                    (row_delta == 2 && col_delta <= 2) ||
-                    (col_delta == 2 && row_delta <= 2)
-                ) {
+                if (row_delta == 2 && col_delta <= 2) || (col_delta == 2 && row_delta <= 2) {
                     ret.push(Position{ row, col });
                 }
             }
@@ -221,7 +215,7 @@ impl BoardAndPoints {
     fn attach_moves(&self, player: &Player) -> BoardAndPointsAndPossibleMoves {
         let moves = self.board.get_all_moves(player);
         BoardAndPointsAndPossibleMoves {
-            boardAndPoints: self.clone(),
+            board_and_points: self.clone(),
             player: player.clone(),
             takes: moves.0,
             jumps:  moves.1
@@ -247,17 +241,17 @@ impl BoardAndPoints {
     }*/
 
     // Step 1a: Square => particular move type into square => Results of that single move
-    fn move_into_square(&self, player: &Player, is_opponent: bool, theMove: &Move) -> BoardAndPoints {
+    fn move_into_square(&self, player: &Player, is_opponent: bool, the_move: &Move) -> BoardAndPoints {
         // Assume that some other function has already determined that moving from that square into that square with the given movetype is valid
 
         // start with the 1 point for taking a new square, if this is a take
         let mut delta: i32 = {
-            match theMove.moveType {
+            match the_move.move_type {
                 MoveType::Take => 1,
                 _ => 0
             }
         };
-        let to: &Position = &theMove.to;
+        let to: &Position = &the_move.to;
         let edge_size = self.board.edge_size;
         let mut new_board: Board = self.board.clone();
 
@@ -290,8 +284,8 @@ impl BoardAndPoints {
         }
 
         // If this is a jump, free the `from` square
-        if theMove.moveType == MoveType::Jump {
-            let p = &mut new_board.squares[theMove.from.row][theMove.from.col];
+        if the_move.move_type == MoveType::Jump {
+            let p = &mut new_board.squares[the_move.from.row][the_move.from.col];
             *p = Player::NoOne;
         }
 
@@ -305,18 +299,18 @@ impl BoardAndPoints {
 impl BoardAndPointsAndPossibleMoves {
     // Entry point
     fn find_best_move(&self, is_opponent: bool, levels_left: u8) -> MoveResult {
-        let firstTake = (&self.takes[0]).clone();
-        let theMove = Move {
-            moveType: MoveType::Take,
-            from: firstTake.0,
-            to: firstTake.1
+        let first_take = (&self.takes[0]).clone();
+        let the_move = Move {
+            move_type: MoveType::Take,
+            from: first_take.0,
+            to: first_take.1
         };
-        let startBoard: BoardAndPointsAndPossibleMoves = self.clone();
-        let endBoard: BoardAndPoints = self.boardAndPoints.move_into_square(&self.player, false, &theMove);
+        let start_board: BoardAndPointsAndPossibleMoves = self.clone();
+        let end_board: BoardAndPoints = self.board_and_points.move_into_square(&self.player, false, &the_move);
         MoveResult{
-            theMove,
-            startBoard,
-            endBoard
+            the_move,
+            start_board,
+            end_board
         }
     }
 }
@@ -332,8 +326,8 @@ fn usize_abs_delta(a: usize, b: usize) -> usize {
 #[wasm_bindgen]
 pub fn greet(board_string: &str) -> String {
     let start: BoardAndPoints = Board::parse_board(board_string);
-    let withMoves: BoardAndPointsAndPossibleMoves = start.attach_moves(&Player::P2);
-    let moveResult: MoveResult = withMoves.find_best_move(false, 1);
-    let theMove = moveResult.theMove;
-    theMove.from.row.to_string() + "," + &theMove.from.col.to_string() + ">" + &theMove.to.row.to_string() + "," + &theMove.to.col.to_string()
+    let with_moves: BoardAndPointsAndPossibleMoves = start.attach_moves(&Player::P2);
+    let move_result: MoveResult = with_moves.find_best_move(false, 1);
+    let the_move = move_result.the_move;
+    the_move.from.row.to_string() + "," + &the_move.from.col.to_string() + ">" + &the_move.to.row.to_string() + "," + &the_move.to.col.to_string()
 }
