@@ -3,12 +3,59 @@
 extern crate wasm_bindgen;
 use wasm_bindgen::prelude::*;
 
+use std::collections::HashSet;
+
 #[derive(PartialEq, Clone)]
 enum Player {
     NoOne,
     P1,
     P2
 }
+
+#[derive(PartialEq)]
+enum MoveType {
+    Take,
+    Jump,
+    Illegal
+}
+
+enum Move {
+    Take(Position),
+    Jump(Position, Position)
+}
+
+#[derive(Clone)]
+struct Board {
+    squares: Vec<Vec<Player>>,
+    edge_size: usize
+}
+
+#[derive(Clone)]
+struct BoardAndPoints {
+    board: Board,
+    points: i32
+}
+
+#[derive(Clone)]
+struct BoardAndPointsAndPossibleMoves {
+    boardAndPoints: BoardAndPoints,
+    player: Player,
+    takes: Vec<Position>,
+    jumps: Vec<(Position, Position)>
+}
+
+#[derive(Hash, Eq, PartialEq, Debug, Clone)]
+struct Position {
+    row: usize,
+    col: usize
+}
+
+struct MoveResult {
+    theMove: Move,
+    startBoard: BoardAndPointsAndPossibleMoves,
+    endBoard: BoardAndPoints
+}
+
 
 // Static
 impl Player {
@@ -31,6 +78,7 @@ impl Player {
         }
     }
 
+    // Reverse polarity
     fn other_player(&self) -> Player {
         match self {
             Player::P1 => Player::P2,
@@ -40,26 +88,9 @@ impl Player {
     }
 }
 
-#[derive(PartialEq)]
-enum Move {
-    Take,
-    Jump,
-    Illegal
-}
-
-#[derive(Clone)]
-struct Board {
-    squares: Vec<Vec<Player>>,
-    edge_size: usize
-}
-
-struct BoardAndPoints {
-    board: Board,
-    points: i32
-}
-
 // Static
 impl Board {
+    // parse board string into board object
     fn parse_board(board_string: &str) -> BoardAndPoints {
         let rows: Vec<&str> = board_string.split(":").collect();
         let squares: Vec<Vec<Player>> = rows.into_iter().map(|row| {
@@ -89,6 +120,76 @@ impl Board {
         let row_sums: Vec<i32> = squares.into_iter().map(|row| get_row_points(&row)).collect();
         row_sums.into_iter().fold(0, |agg, x| agg + x)
     }
+
+    // return true if the player can take that position
+    fn can_take(&self, player: &Player, pos: &Position) -> bool {
+        let edge_size = self.edge_size;
+        let take_rows: Vec<usize> = {
+            if pos.row == 0 { vec![0, 1] }
+            else if pos.row == edge_size-1 { vec![edge_size-2, edge_size-1] }
+            else { vec![pos.row-1, pos.row, pos.row + 1] }
+        };
+        let take_cols: Vec<usize> = {
+            if pos.col == 0 { vec![0, 1] }
+            else if pos.col == edge_size-1 { vec![edge_size-2, edge_size-1] }
+            else { vec![pos.col-1, pos.col, pos.col + 1] }
+        };
+
+        for row in &take_rows {
+            for col in &take_cols {
+                if &self.squares[*row][*col] == player { return true; }
+            }
+        }
+        false
+    }
+
+    // return a vec of all possible starting points for a jump to that position
+    fn get_jumps(&self, player: &Player, pos: &Position) -> Vec<Position> {
+        let mut ret: Vec<Position> = Vec::new();
+        let edge_size = self.edge_size;
+        // for each board square, could that square jump to the desired position
+        for row in 0..self.edge_size {
+            for col in 0..self.edge_size {
+                let owner = &self.squares[row][col];
+                if owner != player { continue; } // not if the player doesnt own it
+
+                let row_delta = usize_abs_delta(row, pos.row);
+                let col_delta = usize_abs_delta(col, pos.col);
+                if (
+                    (row_delta == 2 && col_delta <= 2) ||
+                    (col_delta == 2 && row_delta <= 2)
+                ) {
+                    ret.push(Position{ row, col });
+                }
+            }
+        }
+        ret
+    }
+
+    // vector of all positions that are nonempty
+    fn get_all_moves(&self, player: &Player) -> (Vec<Position>, Vec<(Position, Position)>) {
+        let mut takes: Vec<Position> = Vec::new();
+        let mut jumps: Vec<(Position, Position)> = Vec::new();
+        for row in 0..self.edge_size {
+            for col in 0..self.edge_size {
+                let owner = &self.squares[row][col];
+                if owner != &Player::NoOne {
+                    continue;
+                }
+                let pos = Position{ row, col};
+                if self.can_take(player, &pos) {
+                    takes.push(pos.clone());
+                } else {
+                    let jump_pairs = self.get_jumps(player, &pos);
+                    for from_pos in jump_pairs {
+                        jumps.push((from_pos.clone(), pos.clone()));
+                    }
+                }
+            }
+        }
+        (takes, jumps)
+    }
+
 /*
     // given a board and a desire to move, what kind of move would it be
     fn move_type(&self, p: Player, from_row: usize, from_col: usize, to_row: usize, to_col: usize) -> Move {
@@ -105,27 +206,66 @@ impl Board {
         }
     }
 */
-    fn move_into_square(player: &Player, is_opponent: bool, board_and_points: &BoardAndPoints, from_row: usize, from_col: usize, to_row: usize, to_col: usize, move_type: &Move) -> BoardAndPoints {
+}
+
+// Instance
+impl BoardAndPoints {
+    fn attach_moves(&self, player: &Player) -> BoardAndPointsAndPossibleMoves {
+        let moves = self.board.get_all_moves(player);
+        BoardAndPointsAndPossibleMoves {
+            boardAndPoints: self.clone(),
+            player: player.clone(),
+            takes: moves.0,
+            jumps:  moves.1
+        }
+    }
+
+/*
+
+
+    // Step 1: Square => Set of all moves and results of moving to that square
+    // Given a moving player, board, and a square to move to, return a BoardAndPoints for the result of each move that moves into that square
+    // i.e. 0-1 takes, 0-m jumps, empty vec if there's no way for that player to move into that square
+    fn get_all_moves_to_square(&self, player: &Player, to: Position) -> Vec<BoardAndPoints> {
+        let mut result: Vec<BoardAndPoints> = vec![];
+        let occupying_player = &self.board.squares[to.row][to.col];
+        // if someone already has that square, bail
+        if occupying_player != &Player::NoOne { return result };
+
+        // can we take it with an adjacent?
+        // 
+
+        result
+    }*/
+
+    // Step 1a: Square => particular move type into square => Results of that single move
+    fn move_into_square(&self, player: &Player, is_opponent: bool, theMove: &Move) -> BoardAndPoints {
         // Assume that some other function has already determined that moving from that square into that square with the given movetype is valid
 
         // start with the 1 point for taking a new square, if this is a take
         let mut delta: i32 = {
-            if move_type == &Move::Take { 1 }
-            else { 0 }
+            match theMove {
+                Move::Take(_) => 1,
+                Move::Jump(_, _) => 0
+            }
         };
-        let edge_size = board_and_points.board.edge_size;
-        let mut new_board: Board = board_and_points.board.clone();
+        let to: &Position = match theMove {
+            Move::Take(p) => p,
+            Move::Jump(_, p) => p
+        };
+        let edge_size = self.board.edge_size;
+        let mut new_board: Board = self.board.clone();
 
         // Take all the surrounding squares from the other player
         let take_rows: Vec<usize> = {
-            if to_row == 0 { vec![0, 1] }
-            else if to_row == edge_size-1 { vec![edge_size-2, edge_size-1] }
-            else { vec![to_row-1, to_row, to_row + 1] }
+            if to.row == 0 { vec![0, 1] }
+            else if to.row == edge_size-1 { vec![edge_size-2, edge_size-1] }
+            else { vec![to.row-1, to.row, to.row + 1] }
         };
         let take_cols: Vec<usize> = {
-            if to_col == 0 { vec![0, 1] }
-            else if to_col == edge_size-1 { vec![edge_size-2, edge_size-1] }
-            else { vec![to_col-1, to_col, to_col + 1] }
+            if to.col == 0 { vec![0, 1] }
+            else if to.col == edge_size-1 { vec![edge_size-2, edge_size-1] }
+            else { vec![to.col-1, to.col, to.col + 1] }
         };
         for row in &take_rows {
             for col in &take_cols {
@@ -145,39 +285,32 @@ impl Board {
         }
 
         // If this is a jump, free the `from` square
-        if move_type == &Move::Jump {
-            let p = &mut new_board.squares[from_row][from_col];
-            *p = Player::NoOne;
+        match theMove {
+            Move::Jump(from, _) => {
+                let p = &mut new_board.squares[from.row][from.col];
+                *p = Player::NoOne;
+            }
+            Move::Take(_) => {}
         }
 
         BoardAndPoints{
             board: new_board,
-            points: board_and_points.points + delta
+            points: self.points + delta
         }
     }
+}
 
-
-    // Given a moving player, board, and a square to move to, return a BoardAndPoints for the result of each move that moves into that square
-    // i.e. 0-1 takes, 0-m jumps, empty vec if there's no way for that player to move into that square
-    fn get_all_moves_to_square(player: &Player, board_and_points: &BoardAndPoints, row: usize, col: usize) -> Vec<BoardAndPoints> {
-        let mut result: Vec<BoardAndPoints> = vec![];
-        let occupying_player = &board_and_points.board.squares[row][col];
-        // if someone already has that square, bail
-        if occupying_player != &Player::NoOne { return result };
-
-
-        result
-    }
-
-    fn find_best_move(player: &Player, is_opponent: bool, board_and_points: BoardAndPoints, levels_left: u8) {
-        // for each square, get vector of possible moves that result in gaining that square (0-1 takes, 0-m jumps)
-        // for each move, map to BoardAndPoints node
-        // for each node, recurse
-        let squares = board_and_points.board.squares;
-        for row in squares {
-            for col in row {
-
-            }
+impl BoardAndPointsAndPossibleMoves {
+    // Entry point
+    fn find_best_move(&self, is_opponent: bool, levels_left: u8) -> MoveResult {
+        let firstTake = &self.takes[0];
+        let theMove = Move::Take(firstTake.clone());
+        let startBoard: BoardAndPointsAndPossibleMoves = self.clone();
+        let endBoard: BoardAndPoints = self.boardAndPoints.move_into_square(&self.player, false, &theMove);
+        MoveResult{
+            theMove,
+            startBoard,
+            endBoard
         }
     }
 }
@@ -193,5 +326,10 @@ fn usize_abs_delta(a: usize, b: usize) -> usize {
 #[wasm_bindgen]
 pub fn greet(board_string: &str) -> String {
     let start: BoardAndPoints = Board::parse_board(board_string);
-    "Hello, ".to_owned() + board_string + "!" + &start.points.to_string()
+    let withMoves: BoardAndPointsAndPossibleMoves = start.attach_moves(&Player::P2);
+    let moveResult: MoveResult = withMoves.find_best_move(false, 1);
+    match moveResult.theMove {
+        Move::Take(pos) => pos.row.to_string() + "," + &pos.col.to_string(),
+        Move::Jump(from, to) => from.row.to_string() + "," + &from.col.to_string() + ">" + &to.row.to_string() + "," + &to.col.to_string()
+    }
 }
