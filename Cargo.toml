@@ -1,7 +1,7 @@
 [package]
 name = "spot-rust"
 version = "0.1.0"
-authors = ["Jonathan <coleji@bc.edu>"]
+authors = ["Jonathan Cole"]
 
 [lib]
 crate-type = ["cdylib"]
