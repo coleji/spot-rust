@@ -1,9 +1,10 @@
 https://rustwasm.github.io/wasm-bindgen/whirlwind-tour/introduction.html
 https://github.com/rustwasm/wasm-bindgen
 
-rustup default nightly
+#rustup default nightly
 rustup target add wasm32-unknown-unknown
-cargo +nightly install wasm-bindgen-cli
+#cargo +nightly install wasm-bindgen-cli
+cargo install wasm-bindgen-cli
 
 If tonight's nightly is busted in some way, revert with e.g.
 
