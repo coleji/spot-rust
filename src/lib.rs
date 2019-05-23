@@ -305,7 +305,7 @@ fn usize_abs_delta(a: usize, b: usize) -> usize {
 }
 
 #[wasm_bindgen]
-pub fn greet(board_string: &str) -> String {
+pub fn calc_next_move(board_string: &str) -> String {
     let start: BoardAndPoints = Board::parse_board(board_string);
     let with_moves: BoardAndPointsAndPossibleMoves = start.attach_moves(&Player::P2);
     let move_result: MoveResult = with_moves.find_best_move(false, 1);
