@@ -312,3 +312,10 @@ pub fn greet(board_string: &str) -> String {
     let the_move = move_result.the_move;
     the_move.from.row.to_string() + "," + &the_move.from.col.to_string() + ">" + &the_move.to.row.to_string() + "," + &the_move.to.col.to_string()
 }
+
+
+#[wasm_bindgen]
+pub fn hello_world(s: &str) -> String {
+    "Hello, ".to_string() + s + "!"
+}
+

@@ -1,1 +1,0 @@
-../dist/spot_rust.js
