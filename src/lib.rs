@@ -37,8 +37,8 @@ struct BoardAndPoints {
 struct BoardAndPointsAndPossibleMoves {
 	board_and_points: BoardAndPoints,
 	player: Player,
-	takes: Vec<(Position, Position)>,
-	jumps: Vec<(Position, Position)>,
+	takes: Vec<Move>,
+	jumps: Vec<Move>,
 }
 
 #[derive(Hash, Eq, PartialEq, Debug, Clone)]
@@ -86,6 +86,14 @@ impl Player {
 			Player::P1 => Player::P2,
 			Player::P2 => Player::P1,
 			Player::NoOne => Player::NoOne,
+		}
+	}
+
+	fn score_is_better(&self, new_score: i32, old_score: i32) -> bool {
+		match self {
+			Player::P1 => new_score > old_score,
+			Player::P2 => old_score > new_score,
+			Player::NoOne => true,
 		}
 	}
 }
@@ -188,12 +196,9 @@ impl Board {
 	}
 
 	// vector of all takes and all jumps
-	fn get_all_moves(
-		&self,
-		player: &Player,
-	) -> (Vec<(Position, Position)>, Vec<(Position, Position)>) {
-		let mut takes: Vec<(Position, Position)> = Vec::new();
-		let mut jumps: Vec<(Position, Position)> = Vec::new();
+	fn get_all_moves(&self, player: &Player) -> (Vec<Move>, Vec<Move>) {
+		let mut takes: Vec<Move> = Vec::new();
+		let mut jumps: Vec<Move> = Vec::new();
 		for row in 0..self.edge_size {
 			for col in 0..self.edge_size {
 				let owner = &self.squares[row][col];
@@ -202,11 +207,19 @@ impl Board {
 				}
 				let pos = Position { row, col };
 				match self.can_take(player, &pos) {
-					Some(m) => takes.push((m.from.clone(), m.to.clone())),
+					Some(m) => takes.push(Move {
+						move_type: MoveType::Take,
+						from: m.from.clone(),
+						to: m.to.clone(),
+					}),
 					_ => {
 						let jump_pairs = self.get_jumps(player, &pos);
 						for from_pos in jump_pairs {
-							jumps.push((from_pos.clone(), pos.clone()));
+							jumps.push(Move {
+								move_type: MoveType::Jump,
+								from: from_pos.clone(),
+								to: pos.clone(),
+							});
 						}
 					}
 				}
@@ -231,10 +244,10 @@ impl BoardAndPoints {
 	// Square => particular move type into square => Results of that single move
 	fn move_into_square(
 		&self,
-		player: &Player,
-		is_opponent: bool,
+		is_p2: bool,
 		the_move: &Move,
 	) -> BoardAndPoints {
+		let player = if is_p2 { Player::P2 } else { Player::P1 };
 		// Assume that some other function has already determined that moving from that square into that square with the given movetype is valid
 
 		// start with the 1 point for taking a new square, if this is a take
@@ -280,7 +293,7 @@ impl BoardAndPoints {
 		}
 
 		// If this is an opponent turn, reverse the delta
-		if is_opponent {
+		if is_p2 {
 			delta *= -1;
 		}
 
@@ -295,48 +308,54 @@ impl BoardAndPoints {
 			points: self.points + delta,
 		}
 	}
-}
 
-impl BoardAndPointsAndPossibleMoves {
-	// Entry point
-	fn find_best_move(&self, is_opponent: bool, levels_left: u8) -> MoveResult {
-		let mut results: Vec<MoveResult> = Vec::new();
-		let takes: Vec<Move> = (&self.takes)
-			.into_iter()
-			.map(|t| Move {
-				move_type: MoveType::Take,
-				from: t.0.clone(),
-				to: t.1.clone(),
-			})
-			.collect();
-		let jumps: Vec<Move> = (&self.jumps)
-			.into_iter()
-			.map(|t| Move {
-				move_type: MoveType::Jump,
-				from: t.0.clone(),
-				to: t.1.clone(),
-			})
-			.collect();
-		let moves: Vec<Move> = [&takes[..], &jumps[..]].concat();
-		for the_move in moves {
-			let end_board = self
-				.board_and_points
-				.move_into_square(&self.player, false, &the_move);
-			let points = end_board.points;
-			results.push(MoveResult {
-				the_move: the_move.clone(),
-				start_board: self.clone(),
-				end_board,
-				total_node_value: points,
-			});
-		}
-		let mut winning_result = results[0].clone();
-		for result in results {
-			if result.total_node_value > winning_result.total_node_value {
-				winning_result = result;
+	fn get_best_move(&self, is_p2: bool, levels_left: u8) -> (Option<Move>, i32) {
+	//	log("hi from get_node_value!");
+		if levels_left == 0 {
+			(None, self.points)
+		} else {
+			let moving_player = if is_p2 {
+				&Player::P2
+			} else {
+				&Player::P1
+			};
+			let board_with_moves = self.attach_moves(moving_player);
+			let all_moves: Vec<Move> =
+				[&board_with_moves.takes[..], &board_with_moves.jumps[..]].concat();
+			let nodes: Vec<(Move, BoardAndPoints)> = all_moves
+				.iter()
+				.map(|the_move| {
+					let resulting_board_w_points =
+						self.move_into_square(is_p2, &the_move);
+					(the_move.clone(), resulting_board_w_points)
+				})
+				.collect();
+
+			let best_node = nodes
+				.iter()
+				.map(|node| {
+					(&node.0, &node.1, node.1.get_best_move(!is_p2, levels_left - 1).1)
+				})
+				.fold(None, |best: Option<(&Move, &BoardAndPoints, i32)>, node| {
+					match best {
+						Some(b) => {
+							if moving_player.score_is_better(node.1.points, b.1.points) {
+								Some(node.clone())
+							} else {
+								Some(b)
+							}
+						}
+						None => Some(node.clone())
+					}	
+				});
+
+			match best_node {
+				Some(t) => {
+					(Some(t.0.clone()), t.2)
+				},
+				None => (None, self.points)
 			}
 		}
-		winning_result
 	}
 }
 
@@ -351,16 +370,40 @@ fn usize_abs_delta(a: usize, b: usize) -> usize {
 #[wasm_bindgen]
 pub fn calc_next_move(board_string: &str) -> String {
 	let start: BoardAndPoints = Board::parse_board(board_string);
-	let with_moves: BoardAndPointsAndPossibleMoves = start.attach_moves(&Player::P2);
-	let move_result: MoveResult = with_moves.find_best_move(false, 1);
-	let the_move = move_result.the_move;
-	the_move.from.row.to_string()
-		+ "," + &the_move.from.col.to_string()
-		+ ">" + &the_move.to.row.to_string()
-		+ "," + &the_move.to.col.to_string()
+	log_many("current board value: ", &start.points.to_string());
+	let node_value = start.get_best_move(true, 3u8);
+	let the_move = node_value.0;
+
+	match the_move {
+		Some(m) => {
+			m.from.row.to_string()
+				+ "," + &m.from.col.to_string()
+				+ ">" + &m.to.row.to_string()
+				+ "," + &m.to.col.to_string()
+		}
+		None => "".to_string(),
+	}
 }
 
 #[wasm_bindgen]
 pub fn hello_world(s: &str) -> String {
 	"Hello, ".to_string() + s + "!"
+}
+
+#[wasm_bindgen]
+extern "C" {
+	// Use `js_namespace` here to bind `console.log(..)` instead of just
+	// `log(..)`
+	#[wasm_bindgen(js_namespace = console)]
+	fn log(s: &str);
+
+	// The `console.log` is quite polymorphic, so we can bind it with multiple
+	// signatures. Note that we need to use `js_name` to ensure we always call
+	// `log` in JS.
+	#[wasm_bindgen(js_namespace = console, js_name = log)]
+	fn log_u32(a: u32);
+
+	// Multiple arguments too!
+	#[wasm_bindgen(js_namespace = console, js_name = log)]
+	fn log_many(a: &str, b: &str);
 }
