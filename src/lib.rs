@@ -369,9 +369,11 @@ fn usize_abs_delta(a: usize, b: usize) -> usize {
 
 #[wasm_bindgen]
 pub fn calc_next_move(board_string: &str) -> String {
+	let ai_depth = 3u8;
+	log_many("ai depth: ", &ai_depth.to_string());
 	let start: BoardAndPoints = Board::parse_board(board_string);
 	log_many("current board value: ", &start.points.to_string());
-	let node_value = start.get_best_move(true, 3u8);
+	let node_value = start.get_best_move(true, ai_depth);
 	let the_move = node_value.0;
 
 	match the_move {
