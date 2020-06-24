@@ -96,6 +96,14 @@ impl Player {
 			Player::NoOne => true,
 		}
 	}
+
+	fn to_string(&self) -> &str {
+		match self {
+			Player::P1 => "1",
+			Player::P2 => "2",
+			Player::NoOne => "0",
+		}
+	}
 }
 
 // Static
@@ -116,10 +124,44 @@ impl Board {
 		let points = board.get_points();
 		BoardAndPoints { board, points }
 	}
+
+	fn starting_board(edge_size: usize) -> Board {
+		fn who_starts(row: usize, col: usize, edge_size: usize) -> Player {
+			let top_left = Player::P1;
+			let top_right = top_left.other_player();
+			let edge_minus_one = edge_size-1;
+			if row == 0 && col == 0 { top_left }
+			else if row == edge_minus_one && col == edge_minus_one { top_left }
+			else if row == 0 && col == edge_minus_one { top_right }
+			else if row == edge_minus_one && col == 0 { top_right }
+			else { Player::NoOne }
+		}
+
+		let mut squares: Vec<Vec<Player>> = Vec::new();
+		for row in 0..edge_size {
+			let mut row_vec: Vec<Player> = Vec::new();
+			for col in 0..edge_size {
+				row_vec.push(who_starts(row, col, edge_size));
+			}
+			squares.push(row_vec);
+		}
+		Board {
+			squares,
+			edge_size
+		}
+	}
 }
 
 // Instance
 impl Board {
+	fn serialize_board(&self) -> String {
+		let rows_vec: Vec<String> = (&self.squares).into_iter().map(|row| {
+			let players_vec: Vec<String> = row.into_iter().map(|cell| cell.to_string().to_string()).collect();
+			players_vec.join("")
+		}).collect();
+		rows_vec.join(":")
+	}
+
 	// What is the score for this board
 	fn get_points(&self) -> i32 {
 		fn get_row_points(row: &Vec<Player>) -> i32 {
@@ -310,7 +352,6 @@ impl BoardAndPoints {
 	}
 
 	fn get_best_move(&self, is_p2: bool, levels_left: u8) -> (Option<Move>, i32) {
-	//	log("hi from get_node_value!");
 		if levels_left == 0 {
 			(None, self.points)
 		} else {
@@ -368,6 +409,13 @@ fn usize_abs_delta(a: usize, b: usize) -> usize {
 }
 
 #[wasm_bindgen]
+pub fn invert_player(player_string: &str) -> String {
+	let start_player = Player::parse_string(player_string);
+	let new_player = start_player.other_player();
+	new_player.to_string().to_string()
+}
+
+#[wasm_bindgen]
 pub fn calc_next_move(board_string: &str) -> String {
 	let ai_depth = 3u8;
 	log_many("ai depth: ", &ai_depth.to_string());
@@ -388,8 +436,9 @@ pub fn calc_next_move(board_string: &str) -> String {
 }
 
 #[wasm_bindgen]
-pub fn hello_world(s: &str) -> String {
-	"Hello, ".to_string() + s + "!"
+pub fn new_board(edge_size: usize) -> String {
+	let board = Board::starting_board(edge_size);
+	board.serialize_board()
 }
 
 #[wasm_bindgen]
